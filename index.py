@@ -1,154 +1,146 @@
-
 import cv2
 import numpy as np
-import math
+import imutils
+
+# cap = cv2.VideoCapture(0,cv2.CAP_DSHOW)
 cap = cv2.VideoCapture(0)
-     
-while(1):
-        
-    try:  #an error comes if it does not find anything in window as it cannot find contour of max area
-          #therefore this try error statement
-          
-        ret, frame = cap.read()
-        frame=cv2.flip(frame,1)
-        kernel = np.ones((3,3),np.uint8)
-        
-        #define region of interest
-        roi=frame[100:300, 100:300]
-        
-        
-        cv2.rectangle(frame,(100,100),(300,300),(0,255,0),0)    
-        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-        
-        
-         
-    # define range of skin color in HSV
-        lower_skin = np.array([0,20,70], dtype=np.uint8)
-        upper_skin = np.array([20,255,255], dtype=np.uint8)
-        
-     #extract skin colur imagw  
-        mask = cv2.inRange(hsv, lower_skin, upper_skin)
-        
-   
-        
-    #extrapolate the hand to fill dark spots within
-        mask = cv2.dilate(mask,kernel,iterations = 4)
-        
-    #blur the image
-        mask = cv2.GaussianBlur(mask,(5,5),100) 
-        
-        
-        
-    #find contours
-        _,contours,hierarchy= cv2.findContours(mask,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-    
-   #find contour of max area(hand)
-        cnt = max(contours, key = lambda x: cv2.contourArea(x))
-        
-    #approx the contour a little
-        epsilon = 0.0005*cv2.arcLength(cnt,True)
-        approx= cv2.approxPolyDP(cnt,epsilon,True)
-       
-        
-    #make convex hull around hand
-        hull = cv2.convexHull(cnt)
-        
-     #define area of hull and area of hand
-        areahull = cv2.contourArea(hull)
-        areacnt = cv2.contourArea(cnt)
-      
-    #find the percentage of area not covered by hand in convex hull
-        arearatio=((areahull-areacnt)/areacnt)*100
-    
-     #find the defects in convex hull with respect to hand
-        hull = cv2.convexHull(approx, returnPoints=False)
-        defects = cv2.convexityDefects(approx, hull)
-        
-    # l = no. of defects
-        l=0
-        
-    #code for finding no. of defects due to fingers
-        for i in range(defects.shape[0]):
-            s,e,f,d = defects[i,0]
-            start = tuple(approx[s][0])
-            end = tuple(approx[e][0])
-            far = tuple(approx[f][0])
-            pt= (100,180)
-            
-            
-            # find length of all sides of triangle
-            a = math.sqrt((end[0] - start[0])**2 + (end[1] - start[1])**2)
-            b = math.sqrt((far[0] - start[0])**2 + (far[1] - start[1])**2)
-            c = math.sqrt((end[0] - far[0])**2 + (end[1] - far[1])**2)
-            s = (a+b+c)/2
-            ar = math.sqrt(s*(s-a)*(s-b)*(s-c))
-            
-            #distance between point and convex hull
-            d=(2*ar)/a
-            
-            # apply cosine rule here
-            angle = math.acos((b**2 + c**2 - a**2)/(2*b*c)) * 57
-            
-        
-            # ignore angles > 90 and ignore points very close to convex hull(they generally come due to noise)
-            if angle <= 90 and d>30:
-                l += 1
-                cv2.circle(roi, far, 3, [255,0,0], -1)
-            
-            #draw lines around hand
-            cv2.line(roi,start, end, [0,255,0], 2)
-            
-            
-        l+=1
-        
-        #print corresponding gestures which are in their ranges
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        if l==1:
-            if areacnt<2000:
-                cv2.putText(frame,'Put hand in the box',(0,50), font, 2, (0,0,255), 3, cv2.LINE_AA)
-            else:
-                if arearatio<12:
-                    cv2.putText(frame,'0',(0,50), font, 2, (0,0,255), 3, cv2.LINE_AA)
-                elif arearatio<17.5:
-                    cv2.putText(frame,'Best of luck',(0,50), font, 2, (0,0,255), 3, cv2.LINE_AA)
-                   
+
+bg = None
+# COLORES PARA VISUALIZACIÓN
+color_start = (204, 204, 0)
+color_end = (204, 0, 204)
+color_far = (255, 0, 0)
+color_start_far = (204, 204, 0)
+color_far_end = (204, 0, 204)
+color_start_end = (0, 255, 255)
+color_contorno = (0, 255, 0)
+color_ymin = (0, 130, 255)  # Punto más alto del contorno
+# color_angulo = (0,255,255)
+# color_d = (0,255,255)
+color_fingers = (0, 255, 255)
+while True:
+    ret, frame = cap.read()
+    if ret == False: break
+    # Redimensionar la imagen para que tenga un ancho de 640
+    frame = imutils.resize(frame, width=640)
+    frame = cv2.flip(frame, 1)
+    frameAux = frame.copy()
+
+    if bg is not None:
+        # Determinar la región de interés
+        ROI = frame[50:300, 50:270]
+        cv2.rectangle(frame, (50 - 2, 50 - 2), (270 + 2, 300 + 2), color_fingers, 1)
+        grayROI = cv2.cvtColor(ROI, cv2.COLOR_BGR2GRAY)
+        # Región de interés del fondo de la imagen
+        bgROI = bg[50:300, 50:270]
+        # Determinar la imagen binaria (background vs foreground)
+        dif = cv2.absdiff(grayROI, bgROI)
+        _, th = cv2.threshold(dif, 30, 255, cv2.THRESH_BINARY)
+        th = cv2.medianBlur(th, 7)
+
+        # Encontrando los contornos de la imagen binaria
+        cnts, _ = cv2.findContours(th, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cnts = sorted(cnts, key=cv2.contourArea, reverse=True)[:1]
+        for cnt in cnts:
+            # Encontrar el centro del contorno
+            M = cv2.moments(cnt)
+            if M["m00"] == 0: M["m00"] = 1
+            x = int(M["m10"] / M["m00"])
+            y = int(M["m01"] / M["m00"])
+            cv2.circle(ROI, tuple([x, y]), 5, (0, 255, 0), -1)
+            # Punto más alto del contorno
+            ymin = cnt.min(axis=1)
+            cv2.circle(ROI, tuple(ymin[0]), 5, color_ymin, -1)
+            # Contorno encontrado a través de cv2.convexHull
+            hull1 = cv2.convexHull(cnt)
+            cv2.drawContours(ROI, [hull1], 0, color_contorno, 2)
+            # Defectos convexos
+            hull2 = cv2.convexHull(cnt, returnPoints=False)
+            defects = cv2.convexityDefects(cnt, hull2)
+
+            # Seguimos con la condición si es que existen defectos convexos
+            if defects is not None:
+                inicio = []  # Contenedor en donde se almacenarán los puntos iniciales de los defectos convexos
+                fin = []  # Contenedor en donde se almacenarán los puntos finales de los defectos convexos
+                fingers = 0  # Contador para el número de dedos levantados
+                for i in range(defects.shape[0]):
+
+                    s, e, f, d = defects[i, 0]
+                    start = cnt[s][0]
+                    end = cnt[e][0]
+                    far = cnt[f][0]
+                    # Encontrar el triángulo asociado a cada defecto convexo para determinar ángulo
+                    a = np.linalg.norm(far - end)
+                    b = np.linalg.norm(far - start)
+                    c = np.linalg.norm(start - end)
+
+                    angulo = np.arccos((np.power(a, 2) + np.power(b, 2) - np.power(c, 2)) / (2 * a * b))
+                    angulo = np.degrees(angulo)
+                    angulo = int(angulo)
+
+                    # Se descartarán los defectos convexos encontrados de acuerdo a la distnacia
+                    # entre los puntos inicial, final y más alelago, por el ángulo y d
+                    if np.linalg.norm(start - end) > 20 and angulo < 90 and d > 12000:
+                        # Almacenamos todos los puntos iniciales y finales que han sido
+                        # obtenidos
+                        inicio.append(start)
+                        fin.append(end)
+
+                        # Visualización de distintos datos obtenidos
+                        # cv2.putText(ROI,'{}'.format(angulo),tuple(far), 1, 1.5,color_angulo,2,cv2.LINE_AA)
+                        # cv2.putText(ROI,'{}'.format(d),tuple(far), 1, 1.1,color_d,1,cv2.LINE_AA)
+                        cv2.circle(ROI, tuple(start), 5, color_start, 2)
+                        cv2.circle(ROI, tuple(end), 5, color_end, 2)
+                        cv2.circle(ROI, tuple(far), 7, color_far, -1)
+                        # cv2.line(ROI,tuple(start),tuple(far),color_start_far,2)
+                        # cv2.line(ROI,tuple(far),tuple(end),color_far_end,2)
+                        # cv2.line(ROI,tuple(start),tuple(end),color_start_end,2)
+                # Si no se han almacenado puntos de inicio (o fin), puede tratarse de
+                # 0 dedos levantados o 1 dedo levantado
+                if len(inicio) == 0:
+                    minY = np.linalg.norm(ymin[0] - [x, y])
+                    if minY >= 110:
+                        fingers = fingers + 1
+                        cv2.putText(ROI, '{}'.format(fingers), tuple(ymin[0]), 1, 1.7, (color_fingers), 1, cv2.LINE_AA)
+
+                # Si se han almacenado puntos de inicio, se contará el número de dedos levantados
+                for i in range(len(inicio)):
+                    fingers = fingers + 1
+                    cv2.putText(ROI, '{}'.format(fingers), tuple(inicio[i]), 1, 1.7, (color_fingers), 1, cv2.LINE_AA)
+                    if i == len(inicio) - 1:
+                        fingers = fingers + 1
+                        cv2.putText(ROI, '{}'.format(fingers), tuple(fin[i]), 1, 1.7, (color_fingers), 1, cv2.LINE_AA)
+
+                # Se visualiza el número de dedos levantados en el rectángulo izquierdo
+                if fingers == 0:
+                    cv2.putText(frame, 'A', (390, 45), 1, 4, (color_fingers), 2, cv2.LINE_AA)
                 else:
-                    cv2.putText(frame,'1',(0,50), font, 2, (0,0,255), 3, cv2.LINE_AA)
-                    
-        elif l==2:
-            cv2.putText(frame,'2',(0,50), font, 2, (0,0,255), 3, cv2.LINE_AA)
-            
-        elif l==3:
-         
-              if arearatio<27:
-                    cv2.putText(frame,'3',(0,50), font, 2, (0,0,255), 3, cv2.LINE_AA)
-              else:
-                    cv2.putText(frame,'ok',(0,50), font, 2, (0,0,255), 3, cv2.LINE_AA)
-                    
-        elif l==4:
-            cv2.putText(frame,'4',(0,50), font, 2, (0,0,255), 3, cv2.LINE_AA)
-            
-        elif l==5:
-            cv2.putText(frame,'5',(0,50), font, 2, (0,0,255), 3, cv2.LINE_AA)
-            
-        elif l==6:
-            cv2.putText(frame,'reposition',(0,50), font, 2, (0,0,255), 3, cv2.LINE_AA)
-            
-        else :
-            cv2.putText(frame,'reposition',(10,50), font, 2, (0,0,255), 3, cv2.LINE_AA)
-            
-        #show the windows
-        cv2.imshow('mask',mask)
-        cv2.imshow('frame',frame)
-    except:
-        pass
-        
-    
-    k = cv2.waitKey(5) & 0xFF
+                    if fingers ==1:
+                        cv2.putText(frame, 'I', (390, 45), 1, 4, (color_fingers), 2, cv2.LINE_AA)
+
+                    else:
+                        if fingers == 2:
+                            if angulo > 60:
+                                cv2.putText(frame, 'U', (390, 45), 1, 4, (color_fingers), 2, cv2.LINE_AA)
+                            else:
+                                if angulo<40:
+                                    cv2.putText(frame, 'O', (390, 45), 1, 4, (color_fingers), 2, cv2.LINE_AA)
+                        else:
+                            if fingers == 3:
+                                cv2.putText(frame, 'E', (390, 45), 1, 4, (color_fingers), 2, cv2.LINE_AA)
+                            else:
+                                if fingers == 4:
+                                    cv2.putText(frame, 'Letra desconocida', (300, 45), 1, 2, (color_fingers), 2, cv2.LINE_AA)
+                                else:
+                                    cv2.putText(frame, 'Good Bye', (300, 45), 1, 2, (color_fingers), 2, cv2.LINE_AA)
+
+        cv2.imshow('th', th)
+    cv2.imshow('Frame', frame)
+    k = cv2.waitKey(20)
+    if k == ord('i'):
+        bg = cv2.cvtColor(frameAux, cv2.COLOR_BGR2GRAY)
     if k == 27:
         break
-    
+
+cap.release()
 cv2.destroyAllWindows()
-cap.release()    
-
-
