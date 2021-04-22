@@ -18,6 +18,7 @@ color_ymin = (0, 130, 255)  # Punto más alto del contorno
 # color_angulo = (0,255,255)
 # color_d = (0,255,255)
 color_fingers = (0, 255, 255)
+color_text = (41, 128, 185)
 while True:
     ret, frame = cap.read()
     if ret == False: break
@@ -25,6 +26,9 @@ while True:
     frame = imutils.resize(frame, width=640)
     frame = cv2.flip(frame, 1)
     frameAux = frame.copy()
+    cv2.putText(frame, 'Tecla "I" para comenzar', (100,430), 1, 2, (color_far), 2, cv2.LINE_AA)
+    cv2.putText(frame, 'Tecla "ESC" para Salir', (120,470), 1, 2, (color_text), 2, cv2.LINE_AA)
+
 
     if bg is not None:
         # Determinar la región de interés
