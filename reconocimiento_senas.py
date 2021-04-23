@@ -13,15 +13,16 @@ def comenzarReconocimiento():
     color_start = (204, 204, 0)
     color_end = (204, 0, 204)
     color_far = (255, 0, 0)
+    color_start_far = (204, 204, 0)
+    color_far_end = (204, 0, 204)
+    color_start_end = (0, 255, 255)
     color_contorno = (0, 255, 0)
     color_ymin = (0, 130, 255)  
     color_fingers = (0, 255, 255)
     color_text = (41, 128, 185)
 
-
+    
     while True:
-
-        # Reconocer Frames
         ret, frame = cap.read()
         if ret == False: break
         frame = imutils.resize(frame, width=640)
@@ -32,7 +33,6 @@ def comenzarReconocimiento():
 
 
         if bg is not None:
-            # Determinar la región de interés
             ROI = frame[50:300, 50:270]
             cv2.rectangle(frame, (50 - 2, 50 - 2), (270 + 2, 300 + 2), color_fingers, 1)
             grayROI = cv2.cvtColor(ROI, cv2.COLOR_BGR2GRAY)
@@ -59,8 +59,9 @@ def comenzarReconocimiento():
                 if defects is not None:
                     inicio = []  
                     fin = []  
-                    fingers = 0  
+                    fingers = 0 
                     for i in range(defects.shape[0]):
+
                         s, e, f, d = defects[i, 0]
                         start = cnt[s][0]
                         end = cnt[e][0]
@@ -75,11 +76,12 @@ def comenzarReconocimiento():
 
                         if np.linalg.norm(start - end) > 20 and angulo < 90 and d > 12000:
                             inicio.append(start)
-                            fin.append(end)         
+                            fin.append(end)
+
                             cv2.circle(ROI, tuple(start), 5, color_start, 2)
                             cv2.circle(ROI, tuple(end), 5, color_end, 2)
                             cv2.circle(ROI, tuple(far), 7, color_far, -1)
-                     
+                       
                     if len(inicio) == 0:
                         minY = np.linalg.norm(ymin[0] - [x, y])
                         if minY >= 110:
@@ -93,7 +95,7 @@ def comenzarReconocimiento():
                             fingers = fingers + 1
                             cv2.putText(ROI, '{}'.format(fingers), tuple(fin[i]), 1, 1.7, (color_fingers), 1, cv2.LINE_AA)
 
-                    # SCondiciones para Reconocer los distintos gestos de la mano
+                    # Reconocer los distintos gestos de la mano
                     if fingers == 0:
                         cv2.putText(frame, 'Apoyo', (100, 45), 1, 4, (color_fingers), 2, cv2.LINE_AA)
                     else:
@@ -110,7 +112,7 @@ def comenzarReconocimiento():
                             else:                        
                                 cv2.putText(frame, 'Adios', (100, 45), 1, 2, (color_fingers), 2, cv2.LINE_AA)
 
-       # Mostrar y Cerrar Interfaz
+        #  cv2.imshow('th', th)
         cv2.imshow('Frame', frame)
         k = cv2.waitKey(20)
         if k == ord('i'):
